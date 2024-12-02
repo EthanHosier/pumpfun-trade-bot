@@ -5,6 +5,8 @@ import (
 	"os"
 
 	"github.com/ethanhosier/pumpfun-trade-bot/blockchain"
+	"github.com/ethanhosier/pumpfun-trade-bot/coinInfo"
+	"github.com/ethanhosier/pumpfun-trade-bot/pumpfun"
 	"github.com/joho/godotenv"
 )
 
@@ -40,21 +42,14 @@ func main() {
 
 	// willWallet := "BGfHXtqWiXP1goEu66eAeDnHQoLuohspdV5ui51qi56f"
 
-	bc := blockchain.NewBlockchainClient(os.Getenv("HELIUS_API_KEY"))
+	coinInfoClient := coinInfo.NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY")))
 
-	address, sig, err := bc.GetOrCreateTokenAccount("8u4QzAEwvxY1PZQF5EmZu9NtsMufinqG45SVnWivpump", os.Getenv("WALLET_PRIVATE_KEY"))
+	bc := blockchain.NewBlockchainClient(os.Getenv("HELIUS_API_KEY"), coinInfoClient)
+
+	err := bc.BuyToken("2ownHic2xgfAkZX79HQY5QEMaDAEXDXq7BdwAPpQJSCr", "3yDrKYwVa5ezQUvBW8hFHW1TYEdXZ6QziYjze9FvWG67", "24ZiJfVrmAk9GQAtibTz2f2HoHgytWu83Lf5TY9FiUcz", 0.0001, 10, os.Getenv("WALLET_PRIVATE_KEY"))
 	if err != nil {
 		panic(err)
 	}
 
-	if sig != "" {
-		transaction, err := bc.GetTransactionDataWithRetries(sig, 6)
-		if err != nil {
-			panic(err)
-		}
-
-		fmt.Printf("%+v\n", transaction)
-	}
-
-	fmt.Println(address)
+	fmt.Println("Success")
 }

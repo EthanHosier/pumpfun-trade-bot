@@ -2,10 +2,12 @@ package blockchain
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"log"
 	"time"
 
+	"github.com/ethanhosier/pumpfun-trade-bot/coinInfo"
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/programs/associated-token-account"
 	"github.com/gagliardetto/solana-go/programs/system"
@@ -24,13 +26,27 @@ const (
 	subscribeReadTimeout = 5 * time.Second
 )
 
+var (
+	PUMP_PROGRAM                            = solana.MustPublicKeyFromBase58("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P")
+	PUMP_GLOBAL                             = solana.MustPublicKeyFromBase58("4wTV1YmiEkRvAtNtsSGPtUrqRYQMe5SKy2uB4Jjaxnjf")
+	PUMP_EVENT_AUTHORITY                    = solana.MustPublicKeyFromBase58("Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1")
+	PUMP_FEE                                = solana.MustPublicKeyFromBase58("CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM")
+	SYSTEM_PROGRAM                          = solana.MustPublicKeyFromBase58("11111111111111111111111111111111")
+	SYSTEM_TOKEN_PROGRAM                    = solana.MustPublicKeyFromBase58("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+	SYSTEM_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM = solana.MustPublicKeyFromBase58("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
+	SYSTEM_RENT                             = solana.MustPublicKeyFromBase58("SysvarRent111111111111111111111111111111111")
+	SOL                                     = solana.MustPublicKeyFromBase58("So11111111111111111111111111111111111111112")
+	LAMPORTS_PER_SOL                        = uint64(1_000_000_000)
+)
+
 type BlockchainClient struct {
-	apiKey string
-	client *rpc.Client
+	apiKey         string
+	client         *rpc.Client
+	coinInfoClient *coinInfo.CoinInfoClient
 }
 
-func NewBlockchainClient(apiKey string) *BlockchainClient {
-	return &BlockchainClient{apiKey, rpc.New(fmt.Sprintf("%s%s", restEndpoint, apiKey))}
+func NewBlockchainClient(apiKey string, coinInfoClient *coinInfo.CoinInfoClient) *BlockchainClient {
+	return &BlockchainClient{apiKey, rpc.New(fmt.Sprintf("%s%s", restEndpoint, apiKey)), coinInfoClient}
 }
 
 func (b *BlockchainClient) GetTransactionDataWithRetries(signature string, maxRetries int) (*Transaction, error) {
@@ -138,6 +154,7 @@ func (b *BlockchainClient) SendSolanaToWallet(amountInSol float64, senderPrivate
 // 	}
 // }
 
+// MAYBE CAN SKIP THIS??
 // GetOrCreateTokenAccount returns the associated token account address and (OPTIONAL) the transaction signature
 func (b *BlockchainClient) GetOrCreateTokenAccount(tokenMint string, ownerPrivateKey string) (string, string, error) {
 	// Parse private key and get public key
@@ -209,4 +226,118 @@ func (b *BlockchainClient) GetOrCreateTokenAccount(tokenMint string, ownerPrivat
 	log.Printf("Transaction sent: %s", sig.String())
 
 	return ata.String(), sig.String(), nil
+}
+
+func (b *BlockchainClient) BuyToken(
+	mintAddress string,
+	bondingCurveAddress string,
+	associatedBondingCurveAddress string,
+	solAmount float64,
+	slippage float64,
+	privateKey string,
+) error {
+
+	// Convert unique data to required formats
+	mintPubKey := solana.MustPublicKeyFromBase58(mintAddress)
+	bondingCurvePubKey := solana.MustPublicKeyFromBase58(bondingCurveAddress)
+	associatedBondingCurvePubKey := solana.MustPublicKeyFromBase58(associatedBondingCurveAddress)
+	signer, err := solana.PrivateKeyFromBase58(privateKey)
+	if err != nil {
+		return fmt.Errorf("invalid private key: %w", err)
+	}
+	payerPubKey := signer.PublicKey()
+
+	// Create associated token account if it doesn't exist
+	ata, sig, err := b.GetOrCreateTokenAccount(mintAddress, privateKey)
+	if err != nil {
+		return fmt.Errorf("failed to get or create associated token account: %w", err)
+	}
+
+	if sig != "" {
+		_, err = b.GetTransactionDataWithRetries(sig, 12)
+		if err != nil {
+			return fmt.Errorf("failed to get transaction data: %w", err)
+		}
+	}
+
+	ataPubKey, err := solana.PublicKeyFromBase58(ata)
+	if err != nil {
+		return fmt.Errorf("invalid associated token account address: %w", err)
+	}
+
+	price, err := b.coinInfoClient.PriceInSolFromBondingCurveAddress(bondingCurveAddress)
+	if err != nil {
+		return fmt.Errorf("failed to get price in SOL from bonding curve address: %w", err)
+	}
+
+	// Prepare buy instruction
+	tokenAmount := solAmount / price
+	amountInLamports := uint64(tokenAmount * lamportsPerSol)
+
+	maxAmountLamports := uint64(float64(amountInLamports) * (1 + slippage))
+
+	discriminator := make([]byte, 8)
+	binary.LittleEndian.PutUint64(discriminator, 16927863322537952870)
+
+	amountData := make([]byte, 8)
+	binary.LittleEndian.PutUint64(amountData, amountInLamports)
+
+	maxAmountData := make([]byte, 8)
+	binary.LittleEndian.PutUint64(maxAmountData, maxAmountLamports)
+
+	data := append(discriminator, append(amountData, maxAmountData...)...)
+
+	accounts := []*solana.AccountMeta{
+		solana.NewAccountMeta(PUMP_GLOBAL, false, false),                 // PUMP_GLOBAL
+		solana.NewAccountMeta(PUMP_FEE, true, false),                     // PUMP_FEE
+		solana.NewAccountMeta(mintPubKey, false, false),                  // Mint
+		solana.NewAccountMeta(bondingCurvePubKey, true, false),           // Bonding Curve
+		solana.NewAccountMeta(associatedBondingCurvePubKey, true, false), // Associated Bonding Curve
+		solana.NewAccountMeta(ataPubKey, true, false),                    // Associated Token Account
+		solana.NewAccountMeta(payerPubKey, true, true),                   // Payer
+		solana.NewAccountMeta(SYSTEM_PROGRAM, false, false),              // SYSTEM_PROGRAM
+		solana.NewAccountMeta(SYSTEM_TOKEN_PROGRAM, false, false),        // SYSTEM_TOKEN_PROGRAM
+		solana.NewAccountMeta(SYSTEM_RENT, false, false),                 // SYSTEM_RENT
+		solana.NewAccountMeta(PUMP_EVENT_AUTHORITY, false, false),        // PUMP_EVENT_AUTHORITY
+		solana.NewAccountMeta(PUMP_PROGRAM, false, false),                // PUMP_PROGRAM
+	}
+
+	buyInstruction := solana.NewInstruction(
+		solana.MustPublicKeyFromBase58("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"), // PUMP_PROGRAM
+		accounts, // AccountMetaSlice
+		data,     // Instruction data
+	)
+
+	// Send the transaction
+	blockhash, err := b.client.GetLatestBlockhash(context.Background(), rpc.CommitmentFinalized)
+	if err != nil {
+		return fmt.Errorf("failed to fetch recent blockhash: %w", err)
+	}
+
+	tx, err := solana.NewTransaction(
+		[]solana.Instruction{buyInstruction},
+		blockhash.Value.Blockhash,
+		solana.TransactionPayer(payerPubKey),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create buy transaction: %w", err)
+	}
+
+	_, err = tx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
+		if signer.PublicKey().Equals(key) {
+			return &signer
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to sign transaction: %w", err)
+	}
+
+	txID, err := b.client.SendTransaction(context.Background(), tx)
+	if err != nil {
+		return fmt.Errorf("failed to send buy transaction: %w", err)
+	}
+
+	fmt.Printf("Transaction successful. TXID: %s\n", txID)
+	return nil
 }

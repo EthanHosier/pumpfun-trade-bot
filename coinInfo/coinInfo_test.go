@@ -48,3 +48,13 @@ func TestCoinDataWithoutHoldersFor(t *testing.T) {
 
 	t.Logf("Coin data: %+v", coinData)
 }
+
+func TestPriceInSolFromBondingCurveAddress(t *testing.T) {
+	client := NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY")))
+	price, err := client.PriceInSolFromBondingCurveAddress("3yDrKYwVa5ezQUvBW8hFHW1TYEdXZ6QziYjze9FvWG67")
+	if err != nil {
+		t.Errorf("Error getting price in SOL from bonding curve address: %v", err)
+	}
+
+	t.Logf("Price in SOL: %f", price)
+}
