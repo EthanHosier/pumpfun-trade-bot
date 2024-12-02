@@ -3,11 +3,13 @@ package blockchain
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/ethanhosier/pumpfun-trade-bot/coinInfo"
 	"github.com/ethanhosier/pumpfun-trade-bot/utils"
 	"github.com/gagliardetto/solana-go"
+	computebudget "github.com/gagliardetto/solana-go/programs/compute-budget"
 	"github.com/gagliardetto/solana-go/programs/system"
 	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/gorilla/websocket"
@@ -147,7 +149,7 @@ func (b *BlockchainClient) BuyTokenWithSol(
 	solAmount float64,
 	slippage float64,
 	privateKey string,
-) error {
+) (*BuyTokenResult, error) {
 
 	blockhashTask := utils.DoAsync(func() (*rpc.GetLatestBlockhashResult, error) {
 		return b.client.GetLatestBlockhash(context.Background(), rpc.CommitmentFinalized)
@@ -156,28 +158,33 @@ func (b *BlockchainClient) BuyTokenWithSol(
 	// Convert unique data to required formats
 	mintPubKey, bondingCurvePubKey, associatedBondingCurvePubKey, err := pubKeysFrom(tokenMint, bondingCurveAddress, associatedBondingCurveAddress)
 	if err != nil {
-		return fmt.Errorf("failed to parse pub keys: %w", err)
+		return nil, fmt.Errorf("failed to parse pub keys: %w", err)
 	}
 	signer, err := solana.PrivateKeyFromBase58(privateKey)
 	if err != nil {
-		return fmt.Errorf("invalid private key: %w", err)
+		return nil, fmt.Errorf("invalid private key: %w", err)
 	}
 	payerPubKey := signer.PublicKey()
 
-	ataPubKey, ataCreateInstruction, err := b.getTokenAccount(mintPubKey, signer)
+	ata, ataCreateInstruction, err := b.getOrCreateTokenAccountInstruction(mintPubKey, signer)
 	if err != nil {
-		return fmt.Errorf("failed to get token account: %w", err)
+		return nil, fmt.Errorf("failed to get or create associated token account: %w", err)
+	}
+
+	ataPubKey, err := solana.PublicKeyFromBase58(ata)
+	if err != nil {
+		return nil, fmt.Errorf("invalid associated token account address: %w", err)
 	}
 
 	price, err := b.coinInfoClient.PriceInSolFromBondingCurveAddress(bondingCurveAddress)
 	if err != nil {
-		return fmt.Errorf("failed to get price in SOL from bonding curve address: %w", err)
+		return nil, fmt.Errorf("failed to get price in SOL from bonding curve address: %w", err)
 	}
 
 	// Replace the calculation with function call
 	amountInLamports, maxAmountLamports, err := buyTokenAmountsFrom(solAmount, price, slippage)
 	if err != nil {
-		return fmt.Errorf("failed to calculate token amounts: %w", err)
+		return nil, fmt.Errorf("failed to calculate token amounts: %w", err)
 	}
 
 	buyInstruction := solana.NewInstruction(
@@ -189,7 +196,7 @@ func (b *BlockchainClient) BuyTokenWithSol(
 	// Send the transaction
 	blockhash, err := utils.GetAsync(blockhashTask)
 	if err != nil {
-		return fmt.Errorf("failed to fetch recent blockhash: %w", err)
+		return nil, fmt.Errorf("failed to fetch recent blockhash: %w", err)
 	}
 
 	tx, err := solana.NewTransaction(
@@ -198,7 +205,7 @@ func (b *BlockchainClient) BuyTokenWithSol(
 		solana.TransactionPayer(payerPubKey),
 	)
 	if err != nil {
-		return fmt.Errorf("failed to create buy transaction: %w", err)
+		return nil, fmt.Errorf("failed to create buy transaction: %w", err)
 	}
 
 	_, err = tx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
@@ -208,14 +215,118 @@ func (b *BlockchainClient) BuyTokenWithSol(
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("failed to sign transaction: %w", err)
+		return nil, fmt.Errorf("failed to sign transaction: %w", err)
 	}
 
 	txID, err := b.client.SendTransaction(context.Background(), tx)
 	if err != nil {
-		return fmt.Errorf("failed to send buy transaction: %w", err)
+		return nil, fmt.Errorf("failed to send buy transaction: %w", err) //TODO: handle case where blockhash invalid
 	}
 
 	fmt.Printf("Transaction successful. TXID: %s\n", txID)
-	return nil
+	return &BuyTokenResult{TxID: txID.String(), AmountInLampts: amountInLamports, MaxAmountLampts: maxAmountLamports, AssociatedTokenAccountAddress: ata}, nil
+}
+
+func (b *BlockchainClient) SellTokenWithSol(
+	tokenMint string,
+	bondingCurveAddress string,
+	associatedBondingCurveAddress string,
+	associatedTokenAccountAddress string,
+	slippage float64,
+	privateKey string,
+) (string, error) {
+	// Get latest blockhash asynchronously
+	blockhashTask := utils.DoAsync(func() (*rpc.GetLatestBlockhashResult, error) {
+		return b.client.GetLatestBlockhash(context.Background(), rpc.CommitmentFinalized)
+	})
+
+	// Convert addresses to public keys
+	mintPubKey, bondingCurvePubKey, associatedBondingCurvePubKey, err := pubKeysFrom(tokenMint, bondingCurveAddress, associatedBondingCurveAddress)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse pub keys: %w", err)
+	}
+
+	// Parse private key
+	signer, err := solana.PrivateKeyFromBase58(privateKey)
+	if err != nil {
+		return "", fmt.Errorf("invalid private key: %w", err)
+	}
+
+	// Get ATA public key
+	ataPubKey, err := solana.PublicKeyFromBase58(associatedTokenAccountAddress)
+	if err != nil {
+		return "", fmt.Errorf("invalid associated token account address: %w", err)
+	}
+
+	// Get token balance
+	tokenBalance, err := b.client.GetTokenAccountBalance(
+		context.Background(),
+		ataPubKey,
+		rpc.CommitmentFinalized,
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to get token balance: %w", err)
+	}
+
+	if tokenBalance.Value.Amount == "0" {
+		return "", fmt.Errorf("no tokens to sell")
+	}
+
+	// Get price from bonding curve
+	price, err := b.coinInfoClient.PriceInSolFromBondingCurveAddress(bondingCurveAddress)
+	if err != nil {
+		return "", fmt.Errorf("failed to get price from bonding curve: %w", err)
+	}
+
+	// Calculate minimum SOL output with slippage
+	amount, err := strconv.ParseUint(tokenBalance.Value.Amount, 10, 64)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse token amount: %w", err)
+	}
+
+	minSolOutput := uint64(float64(amount) * price * (1 - slippage))
+
+	// Create sell instruction
+	sellInstruction := solana.NewInstruction(
+		PUMP_PROGRAM,
+		sellAccountsFrom(mintPubKey, bondingCurvePubKey, associatedBondingCurvePubKey, ataPubKey, signer.PublicKey()),
+		sellDataFrom(amount, minSolOutput),
+	)
+
+	// Get blockhash result
+	blockhash, err := utils.GetAsync(blockhashTask)
+	if err != nil {
+		return "", fmt.Errorf("failed to get recent blockhash: %w", err)
+	}
+
+	// Create and sign transaction
+	tx, err := solana.NewTransaction(
+		[]solana.Instruction{
+			computebudget.NewSetComputeUnitLimitInstruction(computeUnitLimit).Build(),
+			sellInstruction,
+		},
+		blockhash.Value.Blockhash,
+		solana.TransactionPayer(signer.PublicKey()),
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to create sell transaction: %w", err)
+	}
+
+	_, err = tx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
+		if signer.PublicKey().Equals(key) {
+			return &signer
+		}
+		return nil
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to sign transaction: %w", err)
+	}
+
+	// Send transaction
+	sig, err := b.client.SendTransaction(context.Background(), tx)
+	if err != nil {
+		return "", fmt.Errorf("failed to send sell transaction: %w", err)
+	}
+
+	return sig.String(), nil
 }

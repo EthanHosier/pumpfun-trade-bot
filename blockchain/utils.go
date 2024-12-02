@@ -188,20 +188,6 @@ func (b *BlockchainClient) getOrCreateTokenAccountInstruction(tokenMintPubKey so
 	return ata.String(), createATAIx, nil
 }
 
-func (b *BlockchainClient) getTokenAccount(mintPubKey solana.PublicKey, privateKey solana.PrivateKey) (solana.PublicKey, *associatedtokenaccount.Instruction, error) {
-	ata, ataCreateInstruction, err := b.getOrCreateTokenAccountInstruction(mintPubKey, privateKey)
-	if err != nil {
-		return solana.PublicKey{}, nil, fmt.Errorf("failed to get or create associated token account: %w", err)
-	}
-
-	ataPubKey, err := solana.PublicKeyFromBase58(ata)
-	if err != nil {
-		return solana.PublicKey{}, nil, fmt.Errorf("invalid associated token account address: %w", err)
-	}
-
-	return ataPubKey, ataCreateInstruction, nil
-}
-
 func buyDataFrom(amountInLamports uint64, maxAmountLamports uint64) []byte {
 	discriminator := make([]byte, 8)
 	binary.LittleEndian.PutUint64(discriminator, 16927863322537952870)
@@ -279,4 +265,40 @@ func buyTokenAmountsFrom(solAmount, price, slippage float64) (uint64, uint64, er
 	amountInLamports := uint64(tokenAmount * lamportsPerSol)
 	maxAmountLamports := uint64(float64(amountInLamports) * (1 + slippage))
 	return amountInLamports, maxAmountLamports, nil
+}
+
+func sellDataFrom(amount uint64, minSolOutput uint64) []byte {
+	discriminator := make([]byte, 8)
+	binary.LittleEndian.PutUint64(discriminator, 12502976635542562355)
+
+	amountData := make([]byte, 8)
+	binary.LittleEndian.PutUint64(amountData, amount)
+
+	minSolOutputData := make([]byte, 8)
+	binary.LittleEndian.PutUint64(minSolOutputData, minSolOutput)
+
+	return append(discriminator, append(amountData, minSolOutputData...)...)
+}
+
+func sellAccountsFrom(
+	mintPubKey solana.PublicKey,
+	bondingCurvePubKey solana.PublicKey,
+	associatedBondingCurvePubKey solana.PublicKey,
+	ataPubKey solana.PublicKey,
+	payerPubKey solana.PublicKey,
+) []*solana.AccountMeta {
+	return []*solana.AccountMeta{
+		solana.NewAccountMeta(PUMP_GLOBAL, false, false),                             // PUMP_GLOBAL
+		solana.NewAccountMeta(PUMP_FEE, true, false),                                 // PUMP_FEE
+		solana.NewAccountMeta(mintPubKey, false, false),                              // Mint
+		solana.NewAccountMeta(bondingCurvePubKey, true, false),                       // Bonding Curve
+		solana.NewAccountMeta(associatedBondingCurvePubKey, true, false),             // Associated Bonding Curve
+		solana.NewAccountMeta(ataPubKey, true, false),                                // Associated Token Account
+		solana.NewAccountMeta(payerPubKey, true, true),                               // Payer
+		solana.NewAccountMeta(SYSTEM_PROGRAM, false, false),                          // SYSTEM_PROGRAM
+		solana.NewAccountMeta(SYSTEM_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM, false, false), // SYSTEM_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM
+		solana.NewAccountMeta(SYSTEM_TOKEN_PROGRAM, false, false),                    // SYSTEM_TOKEN_PROGRAM
+		solana.NewAccountMeta(PUMP_EVENT_AUTHORITY, false, false),                    // PUMP_EVENT_AUTHORITY
+		solana.NewAccountMeta(PUMP_PROGRAM, false, false),                            // PUMP_PROGRAM
+	}
 }

@@ -42,3 +42,10 @@ type WalletTransactionSignature struct {
 	Wallet    string `json:"wallet"`
 	Signature string `json:"signature"`
 }
+
+type BuyTokenResult struct {
+	TxID                          string
+	AmountInLampts                uint64
+	MaxAmountLampts               uint64
+	AssociatedTokenAccountAddress string
+}

@@ -20,7 +20,7 @@ func main() {
 	// willWallet := "BGfHXtqWiXP1goEu66eAeDnHQoLuohspdV5ui51qi56f"
 	coinInfoClient := coinInfo.NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY")))
 
-	coinMint := "EVHT58QznieDszQpeTuhCfA3cNhxQUQKRLXgLSxipump"
+	coinMint := "9DcRGV5bDNFg6sxhR15vka4ZUduQbr9HbdchuSrkKXDn"
 	coinData, _, err := coinInfoClient.CoinDataFor(coinMint, false)
 	if err != nil {
 		panic(err)
@@ -28,10 +28,24 @@ func main() {
 
 	bc := blockchain.NewBlockchainClient(os.Getenv("HELIUS_API_KEY"), coinInfoClient)
 
-	err = bc.BuyTokenWithSol(coinMint, coinData.BondingCurve, coinData.AssociatedBondingCurve, 0.001, 10, os.Getenv("WALLET_PRIVATE_KEY"))
+	// buyTokenResult, err := bc.BuyTokenWithSol(coinMint, coinData.BondingCurve, coinData.AssociatedBondingCurve, 0.01, 10, os.Getenv("WALLET_PRIVATE_KEY"))
+	// if err != nil {
+	// 	panic(err)
+	// }
+
+	// fmt.Printf("Success. Result: %+v\n", *buyTokenResult)
+
+	txID, err := bc.SellTokenWithSol(
+		coinMint,
+		coinData.BondingCurve,
+		coinData.AssociatedBondingCurve,
+		"FmtAkNNiaeov2X2cXrfhwTZMH3fGXfZvgthjvXig9kJY",
+		0.3, // 10% slippage
+		os.Getenv("WALLET_PRIVATE_KEY"),
+	)
 	if err != nil {
 		panic(err)
 	}
 
-	fmt.Println("Success")
+	fmt.Printf("Success. Transaction ID: %s\n", txID)
 }
