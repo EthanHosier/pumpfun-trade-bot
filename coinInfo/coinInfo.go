@@ -2,7 +2,6 @@ package coinInfo
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/ethanhosier/pumpfun-trade-bot/pumpfun"
 )
@@ -25,7 +24,6 @@ func (c *CoinInfoClient) CoinDataFor(mint string, getHolders bool) (*pumpfun.Coi
 
 func (c *CoinInfoClient) PriceInSolFromBondingCurveAddress(bondingCurveAddress string) (float64, error) {
 	data, err := fetchCurveData(bondingCurveAddress)
-	log.Printf("Curve data: %+v", data)
 	if err != nil {
 		return 0, fmt.Errorf("failed to fetch curve data: %w", err)
 	}
