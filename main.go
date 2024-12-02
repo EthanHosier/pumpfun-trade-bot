@@ -41,12 +41,17 @@ func main() {
 	fmt.Println("Hello, World!")
 
 	// willWallet := "BGfHXtqWiXP1goEu66eAeDnHQoLuohspdV5ui51qi56f"
-
 	coinInfoClient := coinInfo.NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY")))
+
+	coinMint := "EVHT58QznieDszQpeTuhCfA3cNhxQUQKRLXgLSxipump"
+	coinData, _, err := coinInfoClient.CoinDataFor(coinMint, false)
+	if err != nil {
+		panic(err)
+	}
 
 	bc := blockchain.NewBlockchainClient(os.Getenv("HELIUS_API_KEY"), coinInfoClient)
 
-	err := bc.BuyToken("2ownHic2xgfAkZX79HQY5QEMaDAEXDXq7BdwAPpQJSCr", "3yDrKYwVa5ezQUvBW8hFHW1TYEdXZ6QziYjze9FvWG67", "24ZiJfVrmAk9GQAtibTz2f2HoHgytWu83Lf5TY9FiUcz", 0.0001, 10, os.Getenv("WALLET_PRIVATE_KEY"))
+	err = bc.BuyToken(coinMint, coinData.BondingCurve, coinData.AssociatedBondingCurve, 0.001, 10, os.Getenv("WALLET_PRIVATE_KEY"))
 	if err != nil {
 		panic(err)
 	}

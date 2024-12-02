@@ -10,6 +10,7 @@ import (
 	"github.com/ethanhosier/pumpfun-trade-bot/coinInfo"
 	"github.com/gagliardetto/solana-go"
 	"github.com/gagliardetto/solana-go/programs/associated-token-account"
+	computebudget "github.com/gagliardetto/solana-go/programs/compute-budget"
 	"github.com/gagliardetto/solana-go/programs/system"
 	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/gorilla/websocket"
@@ -156,31 +157,31 @@ func (b *BlockchainClient) SendSolanaToWallet(amountInSol float64, senderPrivate
 
 // MAYBE CAN SKIP THIS??
 // GetOrCreateTokenAccount returns the associated token account address and (OPTIONAL) the transaction signature
-func (b *BlockchainClient) GetOrCreateTokenAccount(tokenMint string, ownerPrivateKey string) (string, string, error) {
+func (b *BlockchainClient) GetOrCreateTokenAccountInstruction(tokenMint string, ownerPrivateKey string) (string, *associatedtokenaccount.Instruction, error) {
 	// Parse private key and get public key
 	privateKey, err := solana.PrivateKeyFromBase58(ownerPrivateKey)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to decode private key: %v", err)
+		return "", nil, fmt.Errorf("failed to decode private key: %v", err)
 	}
 	owner := privateKey.PublicKey()
 
 	// Parse token mint address
 	mint, err := solana.PublicKeyFromBase58(tokenMint)
 	if err != nil {
-		return "", "", fmt.Errorf("invalid token mint address: %v", err)
+		return "", nil, fmt.Errorf("invalid token mint address: %v", err)
 	}
 
 	// Find the associated token account address
 	ata, _, err := solana.FindAssociatedTokenAddress(owner, mint)
 	if err != nil {
-		return "", "", fmt.Errorf("failed to find associated token address: %v", err)
+		return "", nil, fmt.Errorf("failed to find associated token address: %v", err)
 	}
 
 	// Check if the account already exists
 	account, err := b.client.GetAccountInfo(context.Background(), ata)
 	if err == nil && account != nil {
 		log.Printf("Account already exists: %s", ata.String())
-		return ata.String(), "", nil // Account already exists, so no transaction signature
+		return ata.String(), nil, nil // Account already exists, so no transaction signature
 	}
 
 	// Create the instruction to create the associated token account
@@ -190,42 +191,7 @@ func (b *BlockchainClient) GetOrCreateTokenAccount(tokenMint string, ownerPrivat
 		mint,  // token mint
 	).Build()
 
-	// Get latest blockhash
-	recent, err := b.client.GetLatestBlockhash(context.Background(), rpc.CommitmentFinalized)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to get latest blockhash: %v", err)
-	}
-
-	// Build transaction
-	tx, err := solana.NewTransaction(
-		[]solana.Instruction{createATAIx},
-		recent.Value.Blockhash,
-		solana.TransactionPayer(owner),
-	)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to create transaction: %v", err)
-	}
-
-	// Sign transaction
-	_, err = tx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
-		if owner.Equals(key) {
-			return &privateKey
-		}
-		return nil
-	})
-	if err != nil {
-		return "", "", fmt.Errorf("failed to sign transaction: %v", err)
-	}
-
-	// Send transaction
-	sig, err := b.client.SendTransaction(context.Background(), tx)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to send transaction: %v", err)
-	}
-
-	log.Printf("Transaction sent: %s", sig.String())
-
-	return ata.String(), sig.String(), nil
+	return ata.String(), createATAIx, nil
 }
 
 func (b *BlockchainClient) BuyToken(
@@ -248,16 +214,9 @@ func (b *BlockchainClient) BuyToken(
 	payerPubKey := signer.PublicKey()
 
 	// Create associated token account if it doesn't exist
-	ata, sig, err := b.GetOrCreateTokenAccount(mintAddress, privateKey)
+	ata, ataCreateInstruction, err := b.GetOrCreateTokenAccountInstruction(mintAddress, privateKey)
 	if err != nil {
 		return fmt.Errorf("failed to get or create associated token account: %w", err)
-	}
-
-	if sig != "" {
-		_, err = b.GetTransactionDataWithRetries(sig, 12)
-		if err != nil {
-			return fmt.Errorf("failed to get transaction data: %w", err)
-		}
 	}
 
 	ataPubKey, err := solana.PublicKeyFromBase58(ata)
@@ -303,9 +262,9 @@ func (b *BlockchainClient) BuyToken(
 	}
 
 	buyInstruction := solana.NewInstruction(
-		solana.MustPublicKeyFromBase58("6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P"), // PUMP_PROGRAM
-		accounts, // AccountMetaSlice
-		data,     // Instruction data
+		PUMP_PROGRAM, // PUMP_PROGRAM
+		accounts,     // AccountMetaSlice
+		data,         // Instruction data
 	)
 
 	// Send the transaction
@@ -314,11 +273,25 @@ func (b *BlockchainClient) BuyToken(
 		return fmt.Errorf("failed to fetch recent blockhash: %w", err)
 	}
 
+	computeUnitLimitInstruction := computebudget.NewSetComputeUnitLimitInstruction(
+		uint32(60816),
+	).Build()
+
+	instructions := []solana.Instruction{computeUnitLimitInstruction}
+	if ataCreateInstruction != nil {
+		fmt.Printf("Adding ATA create instruction\n")
+		instructions = append(instructions, ataCreateInstruction)
+	} else {
+		fmt.Printf("No ATA create instruction\n")
+	}
+	instructions = append(instructions, buyInstruction)
+
 	tx, err := solana.NewTransaction(
-		[]solana.Instruction{buyInstruction},
+		instructions,
 		blockhash.Value.Blockhash,
 		solana.TransactionPayer(payerPubKey),
 	)
+
 	if err != nil {
 		return fmt.Errorf("failed to create buy transaction: %w", err)
 	}
