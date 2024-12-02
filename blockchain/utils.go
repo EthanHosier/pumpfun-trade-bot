@@ -68,6 +68,7 @@ func (c *BlockchainClient) getTransactionData(signature string) (*Transaction, e
 	return &response.Result.Transaction, nil
 }
 
+// //////////////////////////////////////////////////////////////////////////////////////////////////////
 // Helper function to subscribe to a single wallet's transactions
 func (b *BlockchainClient) subscribeToWalletTransactions(conn *websocket.Conn, wallet string) (int, error) {
 	subscriptionMessage := map[string]interface{}{
@@ -112,3 +113,46 @@ func (b *BlockchainClient) subscribeToWalletTransactions(conn *websocket.Conn, w
 	log.Printf("Subscription response for wallet %s: %v", wallet, subscriptionResponse.Result)
 	return subscriptionResponse.Result, nil
 }
+
+func (b *BlockchainClient) transactionSignaturesLoop(conn *websocket.Conn, done <-chan interface{}, walletTransactionSignaturesCh chan<- WalletTransactionSignature, errCh chan<- error, subscriptionToWallet map[int]string) {
+	defer conn.Close()
+
+	msgCh := make(chan []byte, channelBufferSize) // maybe this can be unbuffered??
+	msgChDone := make(chan struct{})
+
+	// TODO: this is a bit tecky, make this cleaner so done ch makes this exit immediately
+	go func(doneCh <-chan struct{}) {
+		for {
+			_, message, err := conn.ReadMessage()
+			if err != nil {
+				errCh <- fmt.Errorf("websocket read error: %v", err)
+				return
+			}
+			msgCh <- message
+		}
+	}(msgChDone)
+
+	for {
+		// Check for done signal first
+		select {
+		case <-done:
+			log.Println("Done signal received, exiting transaction signatures loop")
+			return
+		case message := <-msgCh:
+			var response LogResponse
+			if err := json.Unmarshal(message, &response); err != nil {
+				errCh <- fmt.Errorf("websocket read error: %v", err)
+				return
+			}
+
+			if response.Method == "logsNotification" {
+				walletTransactionSignaturesCh <- WalletTransactionSignature{
+					Signature: response.Params.Result.Value.Signature,
+					Wallet:    subscriptionToWallet[response.Params.Subscription],
+				}
+			}
+		}
+	}
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////

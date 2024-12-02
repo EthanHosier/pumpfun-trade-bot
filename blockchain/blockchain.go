@@ -1,15 +1,19 @@
 package blockchain
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"log"
 	"time"
 
+	"github.com/gagliardetto/solana-go"
+	"github.com/gagliardetto/solana-go/programs/system"
+	"github.com/gagliardetto/solana-go/rpc"
 	"github.com/gorilla/websocket"
 )
 
 const (
+	lamportsPerSol = 1_000_000_000
+
 	wsEndpoint   = "wss://mainnet.helius-rpc.com/?api-key=" // REMEMBER TO ADD THE %s BACK
 	restEndpoint = "https://mainnet.helius-rpc.com/?api-key="
 
@@ -61,43 +65,61 @@ func (b *BlockchainClient) SubscribeToWalletsTransactionSignatures(walletAddress
 	return walletTransactionSignaturesCh, errCh, nil
 }
 
-func (b *BlockchainClient) transactionSignaturesLoop(conn *websocket.Conn, done <-chan interface{}, walletTransactionSignaturesCh chan<- WalletTransactionSignature, errCh chan<- error, subscriptionToWallet map[int]string) {
-	defer conn.Close()
-
-	msgCh := make(chan []byte, channelBufferSize) // maybe this can be unbuffered??
-	msgChDone := make(chan struct{})
-
-	// TODO: this is a bit tecky, make this cleaner so done ch makes this exit immediately
-	go func(doneCh <-chan struct{}) {
-		for {
-			_, message, err := conn.ReadMessage()
-			if err != nil {
-				errCh <- fmt.Errorf("websocket read error: %v", err)
-				return
-			}
-			msgCh <- message
-		}
-	}(msgChDone)
-
-	for {
-		// Check for done signal first
-		select {
-		case <-done:
-			log.Println("Done signal received, exiting transaction signatures loop")
-			return
-		case message := <-msgCh:
-			var response LogResponse
-			if err := json.Unmarshal(message, &response); err != nil {
-				errCh <- fmt.Errorf("websocket read error: %v", err)
-				return
-			}
-
-			if response.Method == "logsNotification" {
-				walletTransactionSignaturesCh <- WalletTransactionSignature{
-					Signature: response.Params.Result.Value.Signature,
-					Wallet:    subscriptionToWallet[response.Params.Subscription],
-				}
-			}
-		}
+func (b *BlockchainClient) SendSolana(amountInSol float64, senderPrivateKey string, receiverPublicKey string) (string, error) {
+	// Decode private key from base58
+	privateKey, err := solana.PrivateKeyFromBase58(senderPrivateKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to decode private key: %v", err)
 	}
+
+	// Parse receiver's public key
+	receiver, err := solana.PublicKeyFromBase58(receiverPublicKey)
+	if err != nil {
+		return "", fmt.Errorf("invalid receiver public key: %v", err)
+	}
+
+	// Create RPC client
+	client := rpc.New(fmt.Sprintf("%s%s", restEndpoint, b.apiKey))
+
+	// Create transfer instruction
+	transferIx := system.NewTransferInstruction(
+		uint64(amountInSol*lamportsPerSol),
+		privateKey.PublicKey(),
+		receiver,
+	).Build()
+
+	// Get latest blockhash (replacing GetRecentBlockhash)
+	recent, err := client.GetLatestBlockhash(context.Background(), rpc.CommitmentFinalized)
+	if err != nil {
+		return "", fmt.Errorf("failed to get latest blockhash: %v", err)
+	}
+
+	// Build transaction (updated to use new blockhash response)
+	tx, err := solana.NewTransaction(
+		[]solana.Instruction{transferIx},
+		recent.Value.Blockhash,
+		solana.TransactionPayer(privateKey.PublicKey()),
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to create transaction: %v", err)
+	}
+
+	// Sign transaction
+	_, err = tx.Sign(func(key solana.PublicKey) *solana.PrivateKey {
+		if privateKey.PublicKey().Equals(key) {
+			return &privateKey
+		}
+		return nil
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to sign transaction: %v", err)
+	}
+
+	// Send transaction
+	sig, err := client.SendTransaction(context.Background(), tx)
+	if err != nil {
+		return "", fmt.Errorf("failed to send transaction: %v", err)
+	}
+
+	return sig.String(), nil
 }
