@@ -256,15 +256,15 @@ func pubKeysFrom(tokenMint string, bondingCurveAddress string, associatedBonding
 	return mintPubKey, bondingCurvePubKey, associatedBondingCurvePubKey, nil
 }
 
-func buyTokenAmountsFrom(solAmount, price, slippage float64) (uint64, uint64, error) {
+func buyTokenAmountsFrom(solAmount, price, slippage float64) (uint64, uint64, float64, error) {
 	if price == 0 {
-		return 0, 0, fmt.Errorf("price is 0")
+		return 0, 0, 0, fmt.Errorf("price is 0")
 	}
 
 	tokenAmount := solAmount / price
 	amountInLamports := uint64(tokenAmount * lamportsPerSol)
 	maxAmountLamports := uint64(float64(amountInLamports) * (1 + slippage))
-	return amountInLamports, maxAmountLamports, nil
+	return amountInLamports, maxAmountLamports, tokenAmount, nil
 }
 
 func sellDataFrom(amount uint64, minSolOutput uint64) []byte {

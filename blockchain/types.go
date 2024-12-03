@@ -48,4 +48,5 @@ type BuyTokenResult struct {
 	AmountInLampts                uint64
 	MaxAmountLampts               uint64
 	AssociatedTokenAccountAddress string
+	TokenAmount                   float64
 }

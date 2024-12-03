@@ -37,7 +37,7 @@ func TestCoinDataWithHoldersFor(t *testing.T) {
 
 func TestCoinDataWithoutHoldersFor(t *testing.T) {
 	client := NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY")))
-	coinData, holders, err := client.CoinDataFor("Df6yfrKC8kZE3KNkrHERKzAetSxbrWeniQfyJY4Jpump", false)
+	coinData, holders, err := client.CoinDataFor("CBW2QFfKP8VYLn2UfeU6MWTTKQ8n82H47aqKWdKTpump", false)
 	if err != nil {
 		t.Errorf("Error getting coin data: %v", err)
 	}

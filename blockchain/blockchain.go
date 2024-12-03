@@ -182,7 +182,7 @@ func (b *BlockchainClient) BuyTokenWithSol(
 	}
 
 	// Replace the calculation with function call
-	amountInLamports, maxAmountLamports, err := buyTokenAmountsFrom(solAmount, price, slippage)
+	amountInLamports, maxAmountLamports, tokenAmount, err := buyTokenAmountsFrom(solAmount, price, slippage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to calculate token amounts: %w", err)
 	}
@@ -224,10 +224,10 @@ func (b *BlockchainClient) BuyTokenWithSol(
 	}
 
 	fmt.Printf("Transaction successful. TXID: %s\n", txID)
-	return &BuyTokenResult{TxID: txID.String(), AmountInLampts: amountInLamports, MaxAmountLampts: maxAmountLamports, AssociatedTokenAccountAddress: ata}, nil
+	return &BuyTokenResult{TxID: txID.String(), AmountInLampts: amountInLamports, MaxAmountLampts: maxAmountLamports, AssociatedTokenAccountAddress: ata, TokenAmount: tokenAmount}, nil
 }
 
-func (b *BlockchainClient) SellTokenWithSol(
+func (b *BlockchainClient) SellToken(
 	tokenMint string,
 	bondingCurveAddress string,
 	associatedBondingCurveAddress string,
