@@ -197,14 +197,13 @@ func (p *PumpSnipeBot) handleHoldUntilSell(coinData *pumpfun.CoinData, btr *bloc
 		}()
 	}
 
-	for {
-		select {
-		case <-ticker.C:
-			go p.handleSell(coinData.Symbol, coinData, btr, errsCh, "max hold time reached")
-		case <-kohCh:
-			go p.handleSell(coinData.Symbol, coinData, btr, errsCh, "koh reached")
-		}
+	select {
+	case <-ticker.C:
+		go p.handleSell(coinData.Symbol, coinData, btr, errsCh, "max hold time reached")
+	case <-kohCh:
+		go p.handleSell(coinData.Symbol, coinData, btr, errsCh, "koh reached")
 	}
+
 }
 
 func (p *PumpSnipeBot) handleSell(symbol string, coinData *pumpfun.CoinData, btr *blockchain.BuyTokenResult, errsCh chan<- *BotError, reason string) {
