@@ -23,8 +23,8 @@ func (p *PumpSnipeBot) handleNotifyBuy(mint string, tokenAmount float64, symbol 
 	}
 }
 
-func (p *PumpSnipeBot) handleNotifySell(mint string, symbol string) {
-	err := p.notifier.SendSMS(fmt.Sprintf("SELL: %s -> %s", pumpfunUrl(mint), symbol), ethanPhoneNumber)
+func (p *PumpSnipeBot) handleNotifySell(mint string, symbol string, reason string) {
+	err := p.notifier.SendSMS(fmt.Sprintf("SELL: %s -> %s, %s", pumpfunUrl(mint), symbol, reason), ethanPhoneNumber)
 	if err != nil {
 		slog.Error("Error sending SMS", "error", err)
 	}

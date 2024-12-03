@@ -17,7 +17,7 @@ import (
 
 const (
 	lamportsPerSol   = 1_000_000_000
-	computeUnitLimit = 60816
+	computeUnitLimit = 200000 // maybe make this smaller?
 
 	wsEndpoint   = "wss://mainnet.helius-rpc.com/?api-key=" // REMEMBER TO ADD THE %s BACK
 	restEndpoint = "https://mainnet.helius-rpc.com/?api-key="
@@ -33,7 +33,7 @@ var (
 	PUMP_EVENT_AUTHORITY                    = solana.MustPublicKeyFromBase58("Ce6TQqeHC9p8KetsN6JsjHK7UTZk7nasjjnr7XxXp9F1")
 	PUMP_FEE                                = solana.MustPublicKeyFromBase58("CebN5WGQ4jvEPvsVU4EoHEpgzq1VV7AbicfhtW4xC9iM")
 	SYSTEM_PROGRAM                          = solana.MustPublicKeyFromBase58("11111111111111111111111111111111")
-	SYSTEM_TOKEN_PROGRAM                    = solana.MustPublicKeyFromBase58("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
+	SYSTEM_TOKEN_PROGRAM                    = solana.MustPublicKeyFromBase58("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA") // program id for token program
 	SYSTEM_ASSOCIATED_TOKEN_ACCOUNT_PROGRAM = solana.MustPublicKeyFromBase58("ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL")
 	SYSTEM_RENT                             = solana.MustPublicKeyFromBase58("SysvarRent111111111111111111111111111111111")
 	SOL                                     = solana.MustPublicKeyFromBase58("So11111111111111111111111111111111111111112")

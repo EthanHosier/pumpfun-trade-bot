@@ -19,7 +19,7 @@ func (c *CoinInfoClient) SolPrice() (float64, error) {
 }
 
 func (c *CoinInfoClient) CoinDataFor(mint string, getHolders bool) (*pumpfun.CoinData, []pumpfun.CoinHolder, error) {
-	return c.pumpfunClient.CoinDataFor(mint, getHolders)
+	return c.pumpfunClient.CoinDataFor(mint, getHolders, false)
 }
 
 func (c *CoinInfoClient) PriceInSolFromBondingCurveAddress(bondingCurveAddress string) (float64, error) {

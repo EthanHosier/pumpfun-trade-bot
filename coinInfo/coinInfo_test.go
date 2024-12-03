@@ -15,7 +15,7 @@ func init() {
 }
 
 func TestSolPrice(t *testing.T) {
-	client := NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY")))
+	client := NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY"), os.Getenv("DATA_IMPULSE_PROXY_URL")))
 	price, err := client.SolPrice()
 	if err != nil {
 		t.Errorf("Error getting SOL price: %v", err)
@@ -25,7 +25,7 @@ func TestSolPrice(t *testing.T) {
 }
 
 func TestCoinDataWithHoldersFor(t *testing.T) {
-	client := NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY")))
+	client := NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY"), os.Getenv("DATA_IMPULSE_PROXY_URL")))
 	coinData, holders, err := client.CoinDataFor("Df6yfrKC8kZE3KNkrHERKzAetSxbrWeniQfyJY4Jpump", true)
 	if err != nil {
 		t.Errorf("Error getting coin data: %v", err)
@@ -36,7 +36,7 @@ func TestCoinDataWithHoldersFor(t *testing.T) {
 }
 
 func TestCoinDataWithoutHoldersFor(t *testing.T) {
-	client := NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY")))
+	client := NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY"), os.Getenv("DATA_IMPULSE_PROXY_URL")))
 	coinData, holders, err := client.CoinDataFor("CBW2QFfKP8VYLn2UfeU6MWTTKQ8n82H47aqKWdKTpump", false)
 	if err != nil {
 		t.Errorf("Error getting coin data: %v", err)
@@ -50,7 +50,7 @@ func TestCoinDataWithoutHoldersFor(t *testing.T) {
 }
 
 func TestPriceInSolFromBondingCurveAddress(t *testing.T) {
-	client := NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY")))
+	client := NewCoinInfoClient(pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY"), os.Getenv("DATA_IMPULSE_PROXY_URL")))
 	price, err := client.PriceInSolFromBondingCurveAddress("3yDrKYwVa5ezQUvBW8hFHW1TYEdXZ6QziYjze9FvWG67")
 	if err != nil {
 		t.Errorf("Error getting price in SOL from bonding curve address: %v", err)
