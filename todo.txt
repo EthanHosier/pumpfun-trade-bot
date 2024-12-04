@@ -1,0 +1,16 @@
+1. Add tests for buying / selling
+2. Determine how long for transaction to go through - time this
+
+3. Bot crawler live
+   Get koh. Look at trades. determnine 100% bots. Add to list
+
+   Determine bot:
+   Get transactions.
+   Check that coins at n intervals were all KOH
+
+
+  ^
+  For each signature, look it up. Filter for pumpfuns. Check that pumpfun token, 
+  check was KOH and get its trades (make sure bought early). 
+
+  tests all the way through

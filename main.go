@@ -15,7 +15,7 @@ func main() {
 	config := config.MustNewDefaultConfig()
 	bot := pumpSnipeBot.NewPumpSnipeBot(config.Notifier, config.BlockchainClient, config.CoinInfoClient, config.PumpFunClient)
 
-	wallets := []string{"EJNqoDXGXoUW7xvs9J9wvSFjxe8JjCM2WVoQeqcAAkD8"}
+	wallets := []string{""}
 	panic(bot.Start(wallets))
 
 }

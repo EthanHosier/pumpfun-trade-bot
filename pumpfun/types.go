@@ -49,3 +49,17 @@ type CoinData struct {
 	ProfileImage           *string `json:"profile_image"`
 	UsdMarketCap           float64 `json:"usd_market_cap"`
 }
+
+type Trade struct {
+	Signature    string  `json:"signature"`
+	Mint         string  `json:"mint"`
+	SolAmount    int64   `json:"sol_amount"`
+	TokenAmount  int64   `json:"token_amount"`
+	IsBuy        bool    `json:"is_buy"`
+	User         string  `json:"user"`
+	Timestamp    int64   `json:"timestamp"`
+	TxIndex      int     `json:"tx_index"`
+	Username     *string `json:"username"`      // pointer since it can be null
+	ProfileImage *string `json:"profile_image"` // pointer since it can be null
+	Slot         int64   `json:"slot"`
+}

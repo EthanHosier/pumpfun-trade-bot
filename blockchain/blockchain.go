@@ -17,7 +17,8 @@ import (
 
 const (
 	lamportsPerSol   = 1_000_000_000
-	computeUnitLimit = 200000 // maybe make this smaller?
+	computeUnitLimit = 68000 // maybe make this smaller?
+	priorityFee      = 100
 
 	wsEndpoint   = "wss://mainnet.helius-rpc.com/?api-key=" // REMEMBER TO ADD THE %s BACK
 	restEndpoint = "https://mainnet.helius-rpc.com/?api-key="
@@ -220,11 +221,41 @@ func (b *BlockchainClient) BuyTokenWithSol(
 
 	txID, err := b.client.SendTransaction(context.Background(), tx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to send buy transaction: %w", err) //TODO: handle case where blockhash invalid
+		return nil, fmt.Errorf("failed to send buy transaction: %w", err)
+	}
+
+	// Poll for transaction confirmation
+	err = b.waitForConfirmation(txID)
+	if err != nil {
+		return nil, fmt.Errorf("transaction confirmation failed: %w", err)
 	}
 
 	fmt.Printf("Transaction successful. TXID: %s\n", txID)
 	return &BuyTokenResult{TxID: txID.String(), AmountInLampts: amountInLamports, MaxAmountLampts: maxAmountLamports, AssociatedTokenAccountAddress: ata, TokenAmount: tokenAmount}, nil
+}
+
+func (b *BlockchainClient) waitForConfirmation(sig solana.Signature) error {
+	for i := 0; i < 50; i++ { // Try for about 25 seconds
+		confirmation, err := b.client.GetSignatureStatuses(
+			context.Background(),
+			true,
+			sig,
+		)
+		if err != nil {
+			return fmt.Errorf("failed to get transaction status: %w", err)
+		}
+
+		if confirmation.Value[0] != nil {
+			if confirmation.Value[0].Err != nil {
+				return fmt.Errorf("transaction failed: %v", confirmation.Value[0].Err)
+			}
+			if confirmation.Value[0].Confirmations != nil && *confirmation.Value[0].Confirmations > 0 {
+				return nil
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("transaction confirmation timed out")
 }
 
 func (b *BlockchainClient) SellToken(
@@ -303,6 +334,7 @@ func (b *BlockchainClient) SellToken(
 	tx, err := solana.NewTransaction(
 		[]solana.Instruction{
 			computebudget.NewSetComputeUnitLimitInstruction(computeUnitLimit).Build(),
+			computebudget.NewSetComputeUnitPriceInstruction(priorityFee).Build(),
 			sellInstruction,
 		},
 		blockhash.Value.Blockhash,
@@ -326,6 +358,12 @@ func (b *BlockchainClient) SellToken(
 	sig, err := b.client.SendTransaction(context.Background(), tx)
 	if err != nil {
 		return "", fmt.Errorf("failed to send sell transaction: %w", err)
+	}
+
+	// Poll for transaction confirmation
+	err = b.waitForConfirmation(sig)
+	if err != nil {
+		return "", fmt.Errorf("transaction confirmation failed: %w", err)
 	}
 
 	return sig.String(), nil

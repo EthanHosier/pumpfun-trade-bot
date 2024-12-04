@@ -59,3 +59,28 @@ func TestCoinDataWithoutHoldersFor(t *testing.T) {
 
 	t.Logf("Coin data: %+v", coinData)
 }
+
+func TestNumberOfTradesForMint(t *testing.T) {
+	client := NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY"), os.Getenv("DATA_IMPULSE_PROXY_URL"))
+	count, err := client.numberOfTradesForMint("2HqtEiU1resCmVXyVe8RcpiekiMTPYtVkDK1Xytppump")
+	if err != nil {
+		t.Errorf("Error getting number of trades: %v", err)
+	}
+
+	if count < 1009 {
+		t.Errorf("Expected number of trades to be greater than 1009, got %d", count)
+	}
+
+	t.Logf("Number of trades: %d", count)
+}
+
+func TestAllTradesForMint(t *testing.T) {
+	client := NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY"), os.Getenv("DATA_IMPULSE_PROXY_URL"))
+	trades, err := client.AllTradesForMint("4cab2KDe448uFKgz21FitpiDM7JWiPzYWdTLTuj7pump")
+	if err != nil {
+		t.Errorf("Error getting all trades: %v", err)
+	}
+
+	t.Logf("Number of trades: %d", len(trades))
+	t.Logf("Trades: %+v", trades)
+}

@@ -10,6 +10,10 @@ import (
 	"github.com/ethanhosier/pumpfun-trade-bot/utils"
 )
 
+const (
+	maxTradePageSize = 200
+)
+
 type PumpFunClient struct {
 	apiKey   string
 	proxyUrl string
@@ -136,4 +140,73 @@ func (p *PumpFunClient) KingOfTheHillCoinData() (*CoinData, error) {
 	}
 
 	return &coinDataResponse, nil
+}
+
+func (p *PumpFunClient) numberOfTradesForMint(mint string) (int, error) {
+	url := fmt.Sprintf("https://frontend-api-v2.pump.fun/trades/count/%s?minimumSize=50000000", mint)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return 0, fmt.Errorf("failed to fetch trade count: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var count int
+	if err := json.NewDecoder(resp.Body).Decode(&count); err != nil {
+		return 0, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return count, nil
+}
+
+// seems to return too many right now??
+func (p *PumpFunClient) AllTradesForMint(mint string) ([]Trade, error) {
+	numOfTrades, err := p.numberOfTradesForMint(mint)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get number of trades: %w", err)
+	}
+
+	numPages := (numOfTrades + maxTradePageSize - 1) / maxTradePageSize
+
+	// Create a slice with sequential numbers from 0 to numPages-1
+	pages := make([]int, numPages)
+	for i := range pages {
+		pages[i] = i
+	}
+
+	tradesTasks := utils.DoAsyncList(pages, func(page int) ([]Trade, error) {
+		return p.tradesForMint(mint, page)
+	})
+
+	tradesArrs, err := utils.GetAsyncList(tradesTasks)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get trades: %w", err)
+	}
+
+	flattenedTrades := make([]Trade, 0)
+	for _, trades := range tradesArrs {
+		flattenedTrades = append(flattenedTrades, trades...)
+	}
+
+	return flattenedTrades, nil
+}
+
+func (p *PumpFunClient) tradesForMint(mint string, page int) ([]Trade, error) {
+	fmt.Println(page)
+
+	url := fmt.Sprintf("https://frontend-api-v2.pump.fun/trades/all/%s?limit=%d&offset=%d&minimumSize=0", mint, maxTradePageSize, page*maxTradePageSize)
+
+	resp, err := http.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch trades: %w", err)
+	}
+
+	defer resp.Body.Close()
+
+	var trades []Trade
+	if err := json.NewDecoder(resp.Body).Decode(&trades); err != nil {
+		return nil, fmt.Errorf("failed to decode response: %w", err)
+	}
+
+	return trades, nil
 }

@@ -14,11 +14,12 @@ import (
 )
 
 const (
-	buyAmountSol = 0.001
-	buySlippage  = 0.5
+	buyAmountSol = 0.05
+	buySlippage  = 0.9
 
 	ethanPhoneNumber = "+447476133726"
-	maxHoldTime      = 20 * time.Second
+	maxHoldTime      = 4 * time.Minute
+	minHoldTime      = 20 * time.Second
 	kohPollTime      = 500 * time.Millisecond
 
 	sellSlippage       = 0.9
@@ -75,6 +76,7 @@ func (p *PumpSnipeBot) Start(wallets []string) error {
 		select {
 		case err := <-transactionErrsCh:
 			if err.forceQuit {
+				slog.Error("Critical error", "error", err.error)
 				p.notifier.SendSMS(fmt.Sprintf("Critical error: %.20s, entering 10 min standby mode", err.error.Error()), ethanPhoneNumber)
 				time.Sleep(10 * time.Minute)
 				return err.error
@@ -165,8 +167,11 @@ func (p *PumpSnipeBot) handleBuyAndSell(mint string, errsCh chan<- *BotError) {
 }
 
 func (p *PumpSnipeBot) handleHoldUntilSell(coinData *pumpfun.CoinData, btr *blockchain.BuyTokenResult, errsCh chan<- *BotError) {
+	time.Sleep(minHoldTime)
+	slog.Info("Min hold time reached", "mint", coinData.Mint, "symbol", coinData.Symbol)
+
 	kohCh := make(chan interface{})
-	ticker := time.NewTicker(maxHoldTime)
+	ticker := time.NewTicker(minHoldTime)
 
 	endTime := time.Now().Add(maxHoldTime)
 
@@ -211,6 +216,7 @@ func (p *PumpSnipeBot) handleSell(symbol string, coinData *pumpfun.CoinData, btr
 	txID, err := p.blockchainClient.SellToken(coinData.Mint, coinData.BondingCurve, coinData.AssociatedBondingCurve, btr.AssociatedTokenAccountAddress, sellSlippage, os.Getenv("WALLET_PRIVATE_KEY"))
 	if err != nil {
 		// retry once
+		slog.Info("Retrying sell", "mint", coinData.Mint, "symbol", symbol, "reason", reason)
 		txID, err = p.blockchainClient.SellToken(coinData.Mint, coinData.BondingCurve, coinData.AssociatedBondingCurve, btr.AssociatedTokenAccountAddress, sellSlippage, os.Getenv("WALLET_PRIVATE_KEY"))
 		if err != nil {
 			errsCh <- &BotError{error: err, forceQuit: true}
