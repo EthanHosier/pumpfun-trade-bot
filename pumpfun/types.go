@@ -63,3 +63,49 @@ type Trade struct {
 	ProfileImage *string `json:"profile_image"` // pointer since it can be null
 	Slot         int64   `json:"slot"`
 }
+
+type StorableTrade struct {
+	Signature    string  `json:"signature"`
+	Mint         string  `json:"mint"`
+	SolAmount    int64   `json:"sol_amount"`
+	TokenAmount  int64   `json:"token_amount"`
+	IsBuy        bool    `json:"is_buy"`
+	UserId       string  `json:"user_id"` // THIS IS `user` IN THE PUMPFUN API
+	Timestamp    int64   `json:"timestamp"`
+	TxIndex      int     `json:"tx_index"`
+	Username     *string `json:"username"`      // pointer since it can be null
+	ProfileImage *string `json:"profile_image"` // pointer since it can be null
+	Slot         int64   `json:"slot"`
+}
+
+func (t *Trade) ToStorableTrade() *StorableTrade {
+	return &StorableTrade{
+		Signature:    t.Signature,
+		Mint:         t.Mint,
+		SolAmount:    t.SolAmount,
+		TokenAmount:  t.TokenAmount,
+		IsBuy:        t.IsBuy,
+		UserId:       t.User,
+		Timestamp:    t.Timestamp,
+		TxIndex:      t.TxIndex,
+		Username:     t.Username,
+		ProfileImage: t.ProfileImage,
+		Slot:         t.Slot,
+	}
+}
+
+func (t *StorableTrade) ToTrade() *Trade {
+	return &Trade{
+		Signature:    t.Signature,
+		Mint:         t.Mint,
+		SolAmount:    t.SolAmount,
+		TokenAmount:  t.TokenAmount,
+		IsBuy:        t.IsBuy,
+		User:         t.UserId,
+		Timestamp:    t.Timestamp,
+		TxIndex:      t.TxIndex,
+		Username:     t.Username,
+		ProfileImage: t.ProfileImage,
+		Slot:         t.Slot,
+	}
+}

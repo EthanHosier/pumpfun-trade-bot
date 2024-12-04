@@ -10,8 +10,7 @@ import (
 )
 
 const (
-	bufferSize      = 1024
-	pollingInterval = 700 * time.Millisecond
+	bufferSize = 1024
 )
 
 type KingOfTheHillClient struct {
@@ -32,7 +31,7 @@ func (k *KingOfTheHillClient) KingOfTheHillCoinData() (*pumpfun.CoinData, error)
 	return k.pumpfunClient.KingOfTheHillCoinData()
 }
 
-func (k *KingOfTheHillClient) Start() error {
+func (k *KingOfTheHillClient) Start(minPollingInterval time.Duration, maxRetries int) error {
 	numConsecutiveErrors := 0
 	errChan := make(chan error)
 
@@ -40,10 +39,10 @@ func (k *KingOfTheHillClient) Start() error {
 		for {
 			coinData, err := k.KingOfTheHillCoinData()
 			if err != nil {
-				log.Println(err)
+				log.Printf("Error fetching king of the hill coin data %d: %v", numConsecutiveErrors+1, err)
 				numConsecutiveErrors++
 
-				if numConsecutiveErrors > 5 {
+				if numConsecutiveErrors > maxRetries {
 					errChan <- fmt.Errorf("too many consecutive errors while fetching king of the hill coin data: %v", err)
 					return
 				}
@@ -54,7 +53,7 @@ func (k *KingOfTheHillClient) Start() error {
 			// Reset consecutive errors on success
 			numConsecutiveErrors = 0
 			k.notifyListeners(coinData)
-			// time.Sleep(pollingInterval)
+			time.Sleep(minPollingInterval)
 		}
 	}()
 

@@ -192,8 +192,6 @@ func (p *PumpFunClient) AllTradesForMint(mint string) ([]Trade, error) {
 }
 
 func (p *PumpFunClient) tradesForMint(mint string, page int) ([]Trade, error) {
-	fmt.Println(page)
-
 	url := fmt.Sprintf("https://frontend-api-v2.pump.fun/trades/all/%s?limit=%d&offset=%d&minimumSize=0", mint, maxTradePageSize, page*maxTradePageSize)
 
 	resp, err := http.Get(url)

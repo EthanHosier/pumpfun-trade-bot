@@ -1,5 +1,10 @@
 package utils
 
+import (
+	"fmt"
+	"reflect"
+)
+
 type Task[T any] struct {
 	ch      chan T
 	errorCh chan error
@@ -72,4 +77,11 @@ func RemoveDuplicates[T comparable](slice []T, hash func(T) string) []T {
 		}
 	}
 	return result
+}
+
+func Required[T any](value T, name string) T {
+	if reflect.ValueOf(value).IsZero() {
+		panic(fmt.Sprintf("%s is required", name))
+	}
+	return value
 }

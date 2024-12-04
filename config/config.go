@@ -4,10 +4,14 @@ import (
 	"os"
 
 	"github.com/ethanhosier/pumpfun-trade-bot/blockchain"
+	"github.com/ethanhosier/pumpfun-trade-bot/botFinder"
 	"github.com/ethanhosier/pumpfun-trade-bot/coinInfo"
 	"github.com/ethanhosier/pumpfun-trade-bot/kingOfTheHill"
 	"github.com/ethanhosier/pumpfun-trade-bot/notifications"
+	"github.com/ethanhosier/pumpfun-trade-bot/openai"
 	"github.com/ethanhosier/pumpfun-trade-bot/pumpfun"
+	"github.com/ethanhosier/pumpfun-trade-bot/storage"
+	"github.com/ethanhosier/pumpfun-trade-bot/utils"
 )
 
 type Config struct {
@@ -17,24 +21,21 @@ type Config struct {
 	Notifier            notifications.Notifier
 	KingOfTheHillClient *kingOfTheHill.KingOfTheHillClient
 	PumpFunClient       *pumpfun.PumpFunClient
+	Storage             storage.Storage
+	BotFinder           *botFinder.BotFinder
 }
 
 func MustNewDefaultConfig() *Config {
-	heliusApiKey := os.Getenv("HELIUS_API_KEY")
-	if heliusApiKey == "" {
-		panic("HELIUS_API_KEY is not set")
-	}
+	heliusApiKey := utils.Required(os.Getenv("HELIUS_API_KEY"), "HELIUS_API_KEY")
 
-	dataImpulseProxyUrl := os.Getenv("DATA_IMPULSE_PROXY_URL")
-	if dataImpulseProxyUrl == "" {
-		panic("DATA_IMPULSE_PROXY_URL is not set")
-	}
-
-	pumpfunClient := pumpfun.NewPumpFunClient(os.Getenv("PUMPFUN_API_KEY"), dataImpulseProxyUrl)
+	storage := storage.NewSupabaseStorage(utils.Required(os.Getenv("SUPABASE_URL"), "SUPABASE_URL"), utils.Required(os.Getenv("SUPABASE_SERVICE_KEY"), "SUPABASE_SERVICE_KEY"))
+	pumpfunClient := pumpfun.NewPumpFunClient(utils.Required(os.Getenv("PUMPFUN_API_KEY"), "PUMPFUN_API_KEY"), utils.Required(os.Getenv("DATA_IMPULSE_PROXY_URL"), "DATA_IMPULSE_PROXY_URL"))
 	kingOfTheHillClient := kingOfTheHill.NewKingOfTheHillClient(pumpfunClient)
 	coinInfoClient := coinInfo.NewCoinInfoClient(pumpfunClient)
 	blockchainClient := blockchain.NewBlockchainClient(heliusApiKey, coinInfoClient)
-	clicksendClient := notifications.NewClicksendClient(os.Getenv("CLICKSEND_USERNAME"), os.Getenv("CLICKSEND_API_KEY"))
+	clicksendClient := notifications.NewClicksendClient(utils.Required(os.Getenv("CLICKSEND_USERNAME"), "CLICKSEND_USERNAME"), utils.Required(os.Getenv("CLICKSEND_API_KEY"), "CLICKSEND_API_KEY"))
+	openaiClient := openai.NewOpenAiClient(utils.Required(os.Getenv("OPENAI_API_KEY"), "OPENAI_API_KEY"))
+	botFinder := botFinder.NewBotFinder(openaiClient, pumpfunClient, coinInfoClient, storage, kingOfTheHillClient)
 
 	return &Config{
 		HeliusApiKey:        heliusApiKey,
@@ -43,5 +44,7 @@ func MustNewDefaultConfig() *Config {
 		Notifier:            clicksendClient,
 		KingOfTheHillClient: kingOfTheHillClient,
 		PumpFunClient:       pumpfunClient,
+		Storage:             storage,
+		BotFinder:           botFinder,
 	}
 }
