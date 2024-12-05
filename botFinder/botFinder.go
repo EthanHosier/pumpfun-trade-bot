@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	kohId             = "BotFinder"
-	firstSecsToIgnore = 5
+	kohId              = "BotFinder"
+	botSecondsToIgnore = 15
 )
 
 type BotFinder struct {
@@ -58,14 +58,7 @@ func (b *BotFinder) handleNewKohCoin(coinData *pumpfun.CoinData) error {
 		panic(err)
 	}
 
-	// Filter trades in the first 5 seconds are ignored (to avoid sniper bots)
-	cutoffTime := trades[len(trades)-1].Timestamp + firstSecsToIgnore
-	filteredTrades := make([]pumpfun.Trade, 0)
-	for _, trade := range trades {
-		if trade.Timestamp > cutoffTime {
-			filteredTrades = append(filteredTrades, trade)
-		}
-	}
+	filteredTrades := filterTrades(trades, coinData)
 
 	_, err = b.storage.Store(storage.DbCoinsTable, coinData)
 	if err != nil {
@@ -83,4 +76,43 @@ func (b *BotFinder) handleNewKohCoin(coinData *pumpfun.CoinData) error {
 
 	log.Printf("Stored coin data and %d trades for %s %s", len(filteredTrades), coinData.Symbol, coinData.Mint)
 	return nil
+}
+
+func filterTrades(trades []pumpfun.Trade, coinData *pumpfun.CoinData) []pumpfun.Trade {
+	// Create a map to track user trading patterns
+	userTrades := make(map[string][]pumpfun.Trade)
+
+	// Get the timestamp of the first trade (last index since trades are in reverse chronological order)
+	firstTradeTime := trades[len(trades)-1].Timestamp
+
+	// Group trades by user
+	for _, trade := range trades {
+		// ignore coins which come after the Koh timestamp
+		if trade.Timestamp > coinData.KingOfTheHillTimestamp {
+			continue
+		}
+
+		userTrades[trade.User] = append(userTrades[trade.User], trade)
+	}
+
+	// Filter out sniper bot trades
+	var filteredTrades []pumpfun.Trade
+	for _, trade := range trades {
+		userTradeList := userTrades[trade.User]
+
+		// Check if user is a sniper bot:
+		// 1. Has exactly 2 trades
+		// 2. First trade (index 1) is buy, second trade (index 0) is sell
+		// 3. Both trades within 30 seconds of first trade
+		isSniper := len(userTradeList) == 2 &&
+			userTradeList[1].IsBuy && !userTradeList[0].IsBuy &&
+			userTradeList[0].Timestamp-firstTradeTime <= botSecondsToIgnore &&
+			userTradeList[1].Timestamp-firstTradeTime <= botSecondsToIgnore
+
+		if !isSniper {
+			filteredTrades = append(filteredTrades, trade)
+		}
+	}
+
+	return filteredTrades
 }

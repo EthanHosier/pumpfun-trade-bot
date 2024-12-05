@@ -18,6 +18,77 @@ import (
 	"github.com/gorilla/websocket"
 )
 
+type TransactionResponse struct {
+	Result struct {
+		BlockTime int64 `json:"blockTime"`
+		Meta      struct {
+			ComputeUnitsConsumed int      `json:"computeUnitsConsumed"`
+			Fee                  int      `json:"fee"`
+			LogMessages          []string `json:"logMessages"`
+			PreBalances          []int64  `json:"preBalances"`
+			PostBalances         []int64  `json:"postBalances"`
+		} `json:"meta"`
+		Slot        int `json:"slot"`
+		Transaction struct {
+			Message struct {
+				AccountKeys []string `json:"accountKeys"`
+				Header      struct {
+					NumReadonlySignedAccounts   int `json:"numReadonlySignedAccounts"`
+					NumReadonlyUnsignedAccounts int `json:"numReadonlyUnsignedAccounts"`
+					NumRequiredSignatures       int `json:"numRequiredSignatures"`
+				} `json:"header"`
+				Instructions []struct {
+					Accounts    []int  `json:"accounts"`
+					Data        string `json:"data"`
+					ProgramID   int    `json:"programIdIndex"`
+					StackHeight *int   `json:"stackHeight"`
+				} `json:"instructions"`
+				RecentBlockhash string `json:"recentBlockhash"`
+			} `json:"message"`
+			Signatures []string `json:"signatures"`
+		} `json:"transaction"`
+	} `json:"result"`
+}
+
+func (c *BlockchainClient) getTransactionData2(signature string) (*TransactionData, error) {
+	requestBody := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      uuid.New().String(),
+		"method":  "getTransaction",
+		"params": []interface{}{
+			signature,
+		},
+	}
+
+	jsonBody, err := json.Marshal(requestBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	// Make the POST request
+	resp, err := http.Post(
+		restEndpoint+c.apiKey,
+		"application/json",
+		bytes.NewBuffer(jsonBody),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to send request: %v", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read response body: %v", err)
+	}
+
+	var tx TransactionResponse
+	if err := json.Unmarshal(body, &tx); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %v", err)
+	}
+
+	return transactionResponseToTransactionData(&tx), nil
+}
+
 func (c *BlockchainClient) getTransactionData(signature string) (*Transaction, error) {
 	requestBody := map[string]interface{}{
 		"jsonrpc": "2.0",
@@ -48,6 +119,8 @@ func (c *BlockchainClient) getTransactionData(signature string) (*Transaction, e
 	if err != nil {
 		return nil, fmt.Errorf("failed to read response body: %v", err)
 	}
+
+	fmt.Println(string(body))
 
 	var response struct {
 		Result struct {
@@ -300,5 +373,27 @@ func sellAccountsFrom(
 		solana.NewAccountMeta(SYSTEM_TOKEN_PROGRAM, false, false),                    // SYSTEM_TOKEN_PROGRAM
 		solana.NewAccountMeta(PUMP_EVENT_AUTHORITY, false, false),                    // PUMP_EVENT_AUTHORITY
 		solana.NewAccountMeta(PUMP_PROGRAM, false, false),                            // PUMP_PROGRAM
+	}
+}
+
+func transactionResponseToTransactionData(response *TransactionResponse) *TransactionData {
+	var instructions []TransactionDataInstruction
+	for _, instruction := range response.Result.Transaction.Message.Instructions {
+		var accounts []string
+		for _, account := range instruction.Accounts {
+			accounts = append(accounts, response.Result.Transaction.Message.AccountKeys[account])
+		}
+		instructions = append(instructions, TransactionDataInstruction{
+			Accounts:  accounts,
+			Data:      instruction.Data,
+			ProgramID: instruction.ProgramID,
+		})
+	}
+
+	return &TransactionData{
+		Signatures:      response.Result.Transaction.Signatures,
+		Instructions:    instructions,
+		LogMessages:     response.Result.Meta.LogMessages,
+		RecentBlockhash: response.Result.Transaction.Message.RecentBlockhash,
 	}
 }

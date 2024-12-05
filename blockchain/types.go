@@ -50,3 +50,16 @@ type BuyTokenResult struct {
 	AssociatedTokenAccountAddress string
 	TokenAmount                   float64
 }
+
+type TransactionDataInstruction struct {
+	Accounts  []string
+	Data      string
+	ProgramID int
+}
+
+type TransactionData struct {
+	Signatures      []string
+	Instructions    []TransactionDataInstruction
+	LogMessages     []string
+	RecentBlockhash string
+}

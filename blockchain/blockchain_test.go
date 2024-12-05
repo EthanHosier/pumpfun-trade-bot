@@ -15,7 +15,17 @@ func init() {
 
 func TestGetTransactionDataWithRetries(t *testing.T) {
 	client := NewBlockchainClient(os.Getenv("HELIUS_API_KEY"), nil)
-	tx, err := client.GetTransactionDataWithRetries("56WfEe3p2zPesLMqm2v2b1zqGwbw2SLiUCNE77pgSTK49cXEry4Qw47L5VTdA5eC3ZcYJt86v7s1EoDgJPF7jhfN", 3)
+	tx, err := client.GetTransactionDataWithRetries("2UbydyYxAmzvysksVfFmVEfLB1NawTS7GreAuAsauoh8npJSzfZukw5QyU4RQMWp5DYRzQdAF2HqURGxUEUPbUku", 3)
+	if err != nil {
+		t.Errorf("Error getting transaction data: %v", err)
+	}
+
+	t.Logf("Transaction: %+v", tx)
+}
+
+func TestGetTransaction2(t *testing.T) {
+	client := NewBlockchainClient(os.Getenv("HELIUS_API_KEY"), nil)
+	tx, err := client.getTransactionData2("2UbydyYxAmzvysksVfFmVEfLB1NawTS7GreAuAsauoh8npJSzfZukw5QyU4RQMWp5DYRzQdAF2HqURGxUEUPbUku")
 	if err != nil {
 		t.Errorf("Error getting transaction data: %v", err)
 	}

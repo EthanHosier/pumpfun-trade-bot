@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ethanhosier/pumpfun-trade-bot/config"
+	"github.com/ethanhosier/pumpfun-trade-bot/pumpSnipeBot"
 	"github.com/joho/godotenv"
 )
 
@@ -25,4 +26,9 @@ func main() {
 		go func() { config.KingOfTheHillClient.Start(5*time.Second, 999999) }()
 		panic(config.BotFinder.CoinTradeTrackerLoop())
 	}
+
+	// Buy Bot
+	pumpSnipeBot := pumpSnipeBot.NewPumpSnipeBot(config.Notifier, config.BlockchainClient, config.CoinInfoClient, config.PumpFunClient)
+	wallets := []string{"J4bzyKJKZKKz2HUGFiq3DMRaxEaw6MxKf8rjGTvpkqaU"}
+	panic(pumpSnipeBot.Start(wallets))
 }
